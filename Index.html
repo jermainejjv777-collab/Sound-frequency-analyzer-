@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sound Lab Analyzer</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:18px;background:#07111f;color:#edf7ff;font-family:Arial,sans-serif}
+main{max-width:850px;margin:auto}
+header{text-align:center;padding:15px}
+h1 span{color:#45e6ff}
+.panel{background:#101e30;border:1px solid #263b51;border-radius:14px;padding:17px;margin-bottom:15px}
+h2{font-size:16px}
+button,select{padding:12px;border-radius:8px;border:1px solid #30465d}
+button{background:#45e6ff;color:#07111f;font-weight:bold}
+button:disabled{opacity:.4}
+.buttons{display:flex;gap:10px}
+.buttons button{flex:1}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.stat{background:#091727;padding:12px;border-radius:9px;overflow-wrap:anywhere}
+.label{color:#9bb0c6;font-size:12px}
+.val{color:#45e6ff;font-size:22px;font-weight:bold;margin-top:8px}
+.msg{color:#9bb0c6;font-size:13px;line-height:1.6;margin-top:12px}
+canvas{display:block;width:100%;background:#071321}
+#spectrum{height:240px}
+#wave{height:120px}
+select{background:#091727;color:white;width:100%}
+.meter{height:9px;background:#293c50;border-radius:20px;margin-top:12px;overflow:hidden}
+#meter{height:100%;width:0;background:#45e6ff}
+@media(min-width:600px){.stats{grid-template-columns:repeat(4,minmax(0,1fr))}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>SOUND <span>LAB</span></h1>
+<p>Real-Time Sound Frequency Analyzer</p>
+</header>
+
+<section class="panel">
+<p id="status">● Microphone stopped</p>
+<div class="buttons">
+<button id="start">START ANALYZER</button>
+<button id="stop" disabled>STOP</button>
+</div>
+<p class="msg" id="message">Press Start Analyzer and allow microphone access.</p>
+</section>
+
+<section class="panel">
+<h2>Live Measurements</h2>
+<div class="stats">
+<div class="stat"><div class="label">Dominant Frequency</div><div class="val" id="freq">—</div></div>
+<div class="stat"><div class="label">Approximate Pitch</div><div class="val" id="pitch">—</div></div>
+<div class="stat"><div class="label">Signal Level</div><div class="val" id="level">—</div></div>
+<div class="stat"><div class="label">Peak Frequency</div><div class="val" id="peak">—</div></div>
+</div>
+<div class="meter"><div id="meter"></div></div>
+</section>
+
+<section class="panel">
+<h2>Frequency Spectrum</h2>
+<canvas id="spectrum"></canvas>
+<p class="msg">Live frequency graph</p>
+</section>
+
+<section class="panel">
+<h2>Sound Waveform</h2>
+<canvas id="wave"></canvas>
+</section>
+
+<section class="panel">
+<h2>Settings</h2>
+<label for="range">Frequency range</label>
+<select id="range">
+<option value="500">500 Hz</option>
+<option value="1000">1 kHz</option>
+<option value="2000">2 kHz</option>
+<option value="4000">4 kHz</option>
+<option value="8000" selected>8 kHz</option>
+<option value="16000">16 kHz</option>
+</select>
+</section>
+</main>
+<script>
+
+function drawSpectrum() {
+  const canvas = document.getElementById("spectrum");
+  const ctx = canvas.getContext("2d");
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+
+  if (canvas.width !== width * dpr ||
+      canvas.height !== height * dpr) {
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#071321";
+  ctx.fillRect(0, 0, width, height);
+
+  if (!analyser || !freqData) return;
+
+  analyser.getFloatFrequencyData(freqData);
+
+  const maxHz = Math.min(
+    Number(document.getElementById("range").value),
+    audio.sampleRate / 2
+  );
+
+  const binHz = audio.sampleRate / analyser.fftSize;
+  const bins = Math.min(
+    freqData.length,
+    Math.ceil(maxHz / binHz)
+  );
+
+  ctx.strokeStyle = "#20364d";
+
+  for (let i = 0; i <= 4; i++) {
+    const y = height * i / 4;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  const barWidth = width / bins;
+
+  for (let i = 1; i < bins; i++) {
+    const strength = Math.max(
+      0,
+      Math.min(1, (freqData[i] + 100) / 100)
+    );
+
+    const barHeight = strength * height * 0.9;
+
+    ctx.fillStyle = "#45e6ff";
+    ctx.fillRect(
+      i * barWidth,
+      height - barHeight,
+      Math.max(1, barWidth * 0.8),
+      barHeight
+    );
+  }
+}
+
+function drawWave() {
+  const canvas = document.getElementById("wave");
+  const ctx = canvas.getContext("2d");
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const dpr = window.devicePixelRatio || 1;
+
+  if (canvas.width !== width * dpr ||
+      canvas.height !== height * dpr) {
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+  }
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = "#071321";
+  ctx.fillRect(0, 0, width, height);
+
+  if (!analyser || !waveData) return;
+
+  analyser.getByteTimeDomainData(waveData);
+
+  ctx.strokeStyle = "#20364d";
+  ctx.beginPath();
+  ctx.moveTo(0, height / 2);
+  ctx.lineTo(width, height / 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = "#54f5b1";
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+
+  for (let x = 0; x < width; x++) {
+    const i = Math.min(
+      waveData.length - 1,
+      Math.floor(x * waveData.length / width)
+    );
+
+    const y = height / 2 +
+      ((waveData[i] - 128) / 128) * height * 0.42;
+
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+
+  ctx.stroke();
+}
+
+function findPeak() {
+  analyser.getFloatFrequencyData(freqData);
+
+  const binHz = audio.sampleRate / analyser.fftSize;
+  let bestBin = 0;
+  let bestValue = -Infinity;
+
+  for (let i = 1; i < freqData.length; i++) {
+    if (freqData[i] > bestValue) {
+      bestValue = freqData[i];
+      bestBin = i;
+    }
+  }
+
+  if (bestBin === 0 || bestValue < -95) return null;
+
+  return bestBin * binHz;
+}
+
+function getNote(hz) {
+  if (!hz || hz <= 0) return "—";
+
+  const notes = [
+    "C", "C♯", "D", "D♯", "E", "F",
+    "F♯", "G", "G♯", "A", "A♯", "B"
+  ];
+
+  const midi = Math.round(69 + 12 * Math.log2(hz / 440));
+
+  return notes[(midi % 12 + 12) % 12] +
+    (Math.floor(midi / 12) - 1);
+}
+
+function update() {
+  if (!running) return;
+
+  analyser.getByteTimeDomainData(waveData);
+
+  let sum = 0;
+  for (let i = 0; i < waveData.length; i++) {
+    const sample = (waveData[i] - 128) / 128;
+    sum += sample * sample;
+  }
+
+  const rms = Math.sqrt(sum / waveData.length);
+  const db = rms > 0 ? 20 * Math.log10(rms) : -100;
+
+  $("level").textContent = db.toFixed(1) + " dBFS";
+  $("meter").style.width =
+    Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + "%";
+
+  const peak = findPeak();
+
+  if (peak && peak > 0) {
+    $("freq").textContent =
+      peak >= 1000
+        ? (peak / 1000).toFixed(2) + " kHz"
+        : peak.toFixed(1) + " Hz";
+
+    $("peak").textContent =
+      peak >= 1000
+        ? (peak / 1000).toFixed(2) + " kHz"
+        : peak.toFixed(1) + " Hz";
+
+    $("pitch").textContent = getNote(peak);
+  } else {
+    $("freq").textContent = "—";
+    $("peak").textContent = "—";
+    $("pitch").textContent = "—";
+  }
+
+  drawSpectrum();
+  drawWave();
+
+  animation = requestAnimationFrame(update);
+}
+
+async function startAnalyzer() {
+  if (running) return;
+
+  if (!navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia) {
+    $("message").textContent =
+      "Microphone unavailable. Open the website using HTTPS in a supported browser.";
+    return;
+  }
+
+  $("start").disabled = true;
+  $("message").textContent = "Requesting microphone permission...";
+
+  try {
+    const noise = $("noise").value === "on";
+
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: noise,
+        noiseSuppression: noise,
+        autoGainControl: false
+      }
+    });
+
+    audio = new (window.AudioContext ||
+                 window.webkitAudioContext)();
+
+    await audio.resume();
+
+    analyser = audio.createAnalyser();
+    analyser.fftSize = 8192;
+    analyser.smoothingTimeConstant =
+      Number($("smooth").value) / 100;
+
+    source = audio.createMediaStreamSource(stream);
+    source.connect(analyser);
+
+    freqData = new Float32Array(analyser.frequencyBinCount);
+    waveData = new Uint8Array(analyser.fftSize);
+
+    running = true;
+    $("stop").disabled = false;
+    $("dot").classList.add("on");
+    $("status").textContent = "Microphone active";
+    $("message").textContent =
+      "Analyzer running. Speak, clap gently, or play a sound nearby.";
+
+    update();
+  } catch (error) {
+    $("start").disabled = false;
+    $("stop").disabled = true;
+    $("status").textContent = "Microphone stopped";
+    $("message").textContent =
+      "Could not start microphone: " + error.message +
+      ". Check browser permissions and try again.";
+  }
+}
+
+async function stopAnalyzer() {
+  running = false;
+  cancelAnimationFrame(animation);
+
+  if (source) {
+    source.disconnect();
+    source = null;
+  }
+
+  if (stream) {
+    stream.getTracks().forEach(track => track.stop());
+    stream = null;
+  }
+
+  if (audio) {
+    await audio.close();
+    audio = null;
+  }
+
+  analyser = null;
+  freqData = null;
+  waveData = null;
+
+  $("start").disabled = false;
+  $("stop").disabled = true;
+  $("dot").classList.remove("on");
+  $("status").textContent = "Microphone stopped";
+  $("message").textContent =
+    "Analyzer stopped. Press Start Analyzer to begin again.";
+  $("freq").textContent = "—";
+  $("peak").textContent = "—";
+  $("pitch").textContent = "—";
+  $("level").textContent = "—";
+  $("meter").style.width = "0%";
+
+  drawEmpty(spectrum);
+  drawEmpty(wave);
+}
+
+function drawEmpty(canvas) {
+  const ctx = canvas.getContext("2d");
+  const size = resize(canvas, ctx);
+  ctx.fillStyle = "#071321";
+  ctx.fillRect(0, 0, size.width, size.height);
+}
+
+$("start").addEventListener("click", startAnalyzer);
+$("stop").addEventListener("click", stopAnalyzer);
+
+$("smooth").addEventListener("input", event => {
+  $("smoothText").textContent = event.target.value + "%";
+  if (analyser) {
+    analyser.smoothingTimeConstant =
+      Number(event.target.value) / 100;
+  }
+});
+
+$("sensitivity").addEventListener("input", event => {
+  $("sensText").textContent = event.target.value + "%";
+});
+
+$("range").addEventListener("change", () => {
+  if (running) drawSpectrum();
+});
+
+$("noise").addEventListener("change", () => {
+  $("message").textContent =
+    "Noise processing changes apply next time you start the analyzer.";
+});
+
+window.addEventListener("resize", () => {
+  if (running) {
+    drawSpectrum();
+    drawWave();
+  } else {
+    drawEmpty(spectrum);
+    drawEmpty(wave);
+  }
+});
+
+drawEmpty(spectrum);
+drawEmpty(wave);
+</script>
+</body>
+</html>
