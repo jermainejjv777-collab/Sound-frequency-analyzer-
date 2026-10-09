@@ -3,31 +3,41 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#07111f">
 <title>Sound Lab Analyzer</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;padding:18px;background:#07111f;color:#edf7ff;font-family:Arial,sans-serif}
+body{margin:0;padding:15px;background:#07111f;color:#edf7ff;font-family:Arial,sans-serif}
 main{max-width:850px;margin:auto}
-header{text-align:center;padding:15px}
+header{text-align:center;padding:15px 5px}
+h1{letter-spacing:3px}
 h1 span{color:#45e6ff}
-.panel{background:#101e30;border:1px solid #263b51;border-radius:14px;padding:17px;margin-bottom:15px}
-h2{font-size:16px}
-button,select{padding:12px;border-radius:8px;border:1px solid #30465d}
-button{background:#45e6ff;color:#07111f;font-weight:bold}
+.panel{background:#101e30;border:1px solid #263b51;border-radius:14px;padding:16px;margin-bottom:15px}
+h2{font-size:16px;margin-top:0}
+button,select{padding:12px;border-radius:8px;border:1px solid #30465d;font-size:14px}
+button{background:#45e6ff;color:#07111f;font-weight:bold;cursor:pointer}
 button:disabled{opacity:.4}
-.buttons{display:flex;gap:10px}
-.buttons button{flex:1}
-.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.stat{background:#091727;padding:12px;border-radius:9px;overflow-wrap:anywhere}
+.secondary{background:#172a40;color:#edf7ff}
+.record{background:#ff647c;color:#07111f}
+.buttons{display:flex;gap:9px;flex-wrap:wrap}
+.buttons button{flex:1;min-width:105px}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.stat{background:#091727;padding:12px;border-radius:9px;min-width:0}
 .label{color:#9bb0c6;font-size:12px}
-.val{color:#45e6ff;font-size:22px;font-weight:bold;margin-top:8px}
-.msg{color:#9bb0c6;font-size:13px;line-height:1.6;margin-top:12px}
-canvas{display:block;width:100%;background:#071321}
+.val{color:#45e6ff;font-size:clamp(17px,4vw,22px);font-weight:bold;margin-top:8px;overflow-wrap:anywhere}
+.msg{color:#9bb0c6;font-size:13px;line-height:1.6}
+.status-dot{color:#ff647c}
+.status-dot.on{color:#54f5b1}
+canvas{display:block;width:100%;background:#071321;border-radius:6px}
 #spectrum{height:240px}
-#wave{height:120px}
-select{background:#091727;color:white;width:100%}
+#wave{height:125px}
+select{display:block;width:100%;margin-top:7px;background:#091727;color:white}
+.setting{margin-bottom:17px}
+.setting label{display:block;font-size:13px;color:#c4d7e8}
+input[type=range]{width:100%;margin-top:12px;accent-color:#45e6ff}
 .meter{height:9px;background:#293c50;border-radius:20px;margin-top:12px;overflow:hidden}
 #meter{height:100%;width:0;background:#45e6ff}
+.save-link{display:none;text-align:center;margin-top:12px;padding:13px;background:#54f5b1;color:#07111f;font-weight:bold;border-radius:8px;text-decoration:none}
 @media(min-width:600px){.stats{grid-template-columns:repeat(4,minmax(0,1fr))}}
 </style>
 </head>
@@ -36,13 +46,14 @@ select{background:#091727;color:white;width:100%}
 <header>
 <h1>SOUND <span>LAB</span></h1>
 <p>Real-Time Sound Frequency Analyzer</p>
+<p class="msg">Microphone-powered sound analysis</p>
 </header>
 
 <section class="panel">
-<p id="status">● Microphone stopped</p>
+<p><span id="dot" class="status-dot">●</span> <span id="status">Microphone stopped</span></p>
 <div class="buttons">
 <button id="start">START ANALYZER</button>
-<button id="stop" disabled>STOP</button>
+<button id="stop" class="secondary" disabled>STOP</button>
 </div>
 <p class="msg" id="message">Press Start Analyzer and allow microphone access.</p>
 </section>
@@ -56,21 +67,35 @@ select{background:#091727;color:white;width:100%}
 <div class="stat"><div class="label">Peak Frequency</div><div class="val" id="peak">—</div></div>
 </div>
 <div class="meter"><div id="meter"></div></div>
+<p class="msg">Signal level is dBFS, not calibrated sound-pressure decibels.</p>
 </section>
 
 <section class="panel">
 <h2>Frequency Spectrum</h2>
 <canvas id="spectrum"></canvas>
-<p class="msg">Live frequency graph</p>
+<p class="msg">Horizontal axis: frequency. Vertical axis: relative signal strength.</p>
 </section>
 
 <section class="panel">
 <h2>Sound Waveform</h2>
 <canvas id="wave"></canvas>
+<p class="msg">Live waveform captured by the microphone.</p>
+</section>
+
+<section class="panel">
+<h2>Recording</h2>
+<p class="msg">Record microphone audio and save it to your device.</p>
+<div class="buttons">
+<button id="record" class="record" disabled>● RECORD</button>
+<button id="stopRecord" class="secondary" disabled>STOP RECORDING</button>
+</div>
+<a id="save" class="save-link" href="#">SAVE RECORDING</a>
+<p class="msg" id="recordMessage">Start the analyzer before recording.</p>
 </section>
 
 <section class="panel">
 <h2>Settings</h2>
+<div class="setting">
 <label for="range">Frequency range</label>
 <select id="range">
 <option value="500">500 Hz</option>
@@ -80,43 +105,121 @@ select{background:#091727;color:white;width:100%}
 <option value="8000" selected>8 kHz</option>
 <option value="16000">16 kHz</option>
 </select>
+</div>
+<div class="setting">
+<label for="smooth">Graph smoothing: <span id="smoothText">70%</span></label>
+<input id="smooth" type="range" min="0" max="95" value="70">
+</div>
+<div class="setting">
+<label for="sensitivity">Display sensitivity: <span id="sensText">50%</span></label>
+<input id="sensitivity" type="range" min="0" max="100" value="50">
+</div>
+<div class="setting">
+<label for="noise">Microphone noise processing</label>
+<select id="noise">
+<option value="on" selected>Noise suppression ON</option>
+<option value="off">Noise suppression OFF</option>
+</select>
+</div>
+<p class="msg">Noise processing applies the next time you start the analyzer.</p>
 </section>
+<footer class="msg" style="text-align:center">SOUND LAB ANALYZER</footer>
 </main>
+
 <script>
+"use strict";
 
-function drawSpectrum() {
-  const canvas = document.getElementById("spectrum");
-  const ctx = canvas.getContext("2d");
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const dpr = window.devicePixelRatio || 1;
+const $ = id => document.getElementById(id);
 
-  if (canvas.width !== width * dpr ||
-      canvas.height !== height * dpr) {
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
+let audio = null;
+let stream = null;
+let source = null;
+let analyser = null;
+let freqData = null;
+let waveData = null;
+let floatData = null;
+let animation = null;
+let running = false;
+let starting = false;
+let frameCount = 0;
+
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingUrl = null;
+let recordingActive = false;
+let recordingMime = "";
+
+function formatHz(hz) {
+  if (!Number.isFinite(hz) || hz <= 0) return "—";
+  return hz >= 1000
+    ? (hz / 1000).toFixed(2) + " kHz"
+    : hz.toFixed(1) + " Hz";
+}
+
+function getNote(hz) {
+  if (!Number.isFinite(hz) || hz <= 0) return "—";
+  const notes = ["C","C♯","D","D♯","E","F","F♯",
+                 "G","G♯","A","A♯","B"];
+  const midi = Math.round(69 + 12 * Math.log2(hz / 440));
+  const note = notes[(midi % 12 + 12) % 12];
+  return note + (Math.floor(midi / 12) - 1);
+}
+
+function prepareCanvas(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  const width = Math.max(1, Math.round(rect.width));
+  const height = Math.max(1, Math.round(rect.height));
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  if (canvas.width !== Math.round(width * dpr) ||
+      canvas.height !== Math.round(height * dpr)) {
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
   }
 
+  const ctx = canvas.getContext("2d");
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return {ctx, width, height};
+}
+
+function drawEmpty(canvas) {
+  const {ctx, width, height} = prepareCanvas(canvas);
+  ctx.fillStyle = "#071321";
+  ctx.fillRect(0, 0, width, height);
+}
+
+function clearMeasurements() {
+  $("freq").textContent = "—";
+  $("peak").textContent = "—";
+  $("pitch").textContent = "—";
+  $("level").textContent = "—";
+  $("meter").style.width = "0%";
+}
+
+function drawSpectrum() {
+  const {ctx, width, height} = prepareCanvas($("spectrum"));
   ctx.fillStyle = "#071321";
   ctx.fillRect(0, 0, width, height);
 
-  if (!analyser || !freqData) return;
+  if (!analyser || !freqData || !audio) return;
 
   analyser.getFloatFrequencyData(freqData);
 
   const maxHz = Math.min(
-    Number(document.getElementById("range").value),
-    audio.sampleRate / 2
+    Number($("range").value), audio.sampleRate / 2
   );
-
   const binHz = audio.sampleRate / analyser.fftSize;
-  const bins = Math.min(
-    freqData.length,
-    Math.ceil(maxHz / binHz)
-  );
+  const lastBin = Math.max(2, Math.min(
+    freqData.length - 1, Math.floor(maxHz / binHz)
+  ));
+
+  const floorDb = -110 + Number($("sensitivity").value) * 0.35;
+  const ceilingDb = -15;
 
   ctx.strokeStyle = "#20364d";
+  ctx.fillStyle = "#9bb0c6";
+  ctx.lineWidth = 1;
+  ctx.font = "10px Arial";
 
   for (let i = 0; i <= 4; i++) {
     const y = height * i / 4;
@@ -126,20 +229,41 @@ function drawSpectrum() {
     ctx.stroke();
   }
 
-  const barWidth = width / bins;
+  for (let i = 0; i <= 4; i++) {
+    const x = width * i / 4;
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
 
-  for (let i = 1; i < bins; i++) {
-    const strength = Math.max(
-      0,
-      Math.min(1, (freqData[i] + 100) / 100)
+    const hz = maxHz * i / 4;
+    const label = hz >= 1000
+      ? (hz / 1000).toFixed(1) + "k"
+      : Math.round(hz) + " Hz";
+
+    ctx.fillText(
+      label,
+      Math.max(2, Math.min(width - 42, x - 12)),
+      height - 5
     );
+  }
 
-    const barHeight = strength * height * 0.9;
+  const plotHeight = height - 17;
+  const barWidth = width / lastBin;
+
+  for (let i = 1; i <= lastBin; i++) {
+    const db = freqData[i];
+    if (!Number.isFinite(db)) continue;
+
+    const strength = Math.max(0, Math.min(1,
+      (db - floorDb) / (ceilingDb - floorDb)
+    ));
+    const barHeight = strength * plotHeight * 0.9;
 
     ctx.fillStyle = "#45e6ff";
     ctx.fillRect(
-      i * barWidth,
-      height - barHeight,
+      (i - 1) * barWidth,
+      plotHeight - barHeight,
       Math.max(1, barWidth * 0.8),
       barHeight
     );
@@ -147,25 +271,9 @@ function drawSpectrum() {
 }
 
 function drawWave() {
-  const canvas = document.getElementById("wave");
-  const ctx = canvas.getContext("2d");
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const dpr = window.devicePixelRatio || 1;
-
-  if (canvas.width !== width * dpr ||
-      canvas.height !== height * dpr) {
-    canvas.width = width * dpr;
-    canvas.height = height * dpr;
-  }
-
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const {ctx, width, height} = prepareCanvas($("wave"));
   ctx.fillStyle = "#071321";
   ctx.fillRect(0, 0, width, height);
-
-  if (!analyser || !waveData) return;
-
-  analyser.getByteTimeDomainData(waveData);
 
   ctx.strokeStyle = "#20364d";
   ctx.beginPath();
@@ -173,6 +281,9 @@ function drawWave() {
   ctx.lineTo(width, height / 2);
   ctx.stroke();
 
+  if (!analyser || !waveData) return;
+
+  analyser.getByteTimeDomainData(waveData);
   ctx.strokeStyle = "#54f5b1";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -182,62 +293,126 @@ function drawWave() {
       waveData.length - 1,
       Math.floor(x * waveData.length / width)
     );
-
     const y = height / 2 +
       ((waveData[i] - 128) / 128) * height * 0.42;
 
     if (x === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
-
   ctx.stroke();
 }
 
 function findPeak() {
+  if (!analyser || !freqData || !audio) return null;
+
   analyser.getFloatFrequencyData(freqData);
 
+  const maxHz = Math.min(
+    Number($("range").value), audio.sampleRate / 2
+  );
   const binHz = audio.sampleRate / analyser.fftSize;
-  let bestBin = 0;
+  const lastBin = Math.min(
+    freqData.length - 2, Math.floor(maxHz / binHz)
+  );
+
+  let bestBin = 1;
   let bestValue = -Infinity;
 
-  for (let i = 1; i < freqData.length; i++) {
+  for (let i = 1; i <= lastBin; i++) {
     if (freqData[i] > bestValue) {
       bestValue = freqData[i];
       bestBin = i;
     }
   }
 
-  if (bestBin === 0 || bestValue < -95) return null;
+  if (!Number.isFinite(bestValue) || bestValue < -100) return null;
 
-  return bestBin * binHz;
-}
+  // Interpolate between neighboring bins for a better peak estimate.
+  const left = freqData[bestBin - 1];
+  const center = freqData[bestBin];
+  const right = freqData[bestBin + 1];
 
-function getNote(hz) {
-  if (!hz || hz <= 0) return "—";
+  let adjustment = 0;
+  const denominator = left - 2 * center + right;
 
-  const notes = [
-    "C", "C♯", "D", "D♯", "E", "F",
-    "F♯", "G", "G♯", "A", "A♯", "B"
-  ];
-
-  const midi = Math.round(69 + 12 * Math.log2(hz / 440));
-
-  return notes[(midi % 12 + 12) % 12] +
-    (Math.floor(midi / 12) - 1);
-}
-
-function update() {
-  if (!running) return;
-
-  analyser.getByteTimeDomainData(waveData);
-
-  let sum = 0;
-  for (let i = 0; i < waveData.length; i++) {
-    const sample = (waveData[i] - 128) / 128;
-    sum += sample * sample;
+  if (Number.isFinite(denominator) && Math.abs(denominator) > 0.0001) {
+    adjustment = 0.5 * (left - right) / denominator;
+    adjustment = Math.max(-0.5, Math.min(0.5, adjustment));
   }
 
-  const rms = Math.sqrt(sum / waveData.length);
+  return (bestBin + adjustment) * binHz;
+}
+
+function estimatePitch() {
+  if (!analyser || !floatData || !audio) return null;
+
+  analyser.getFloatTimeDomainData(floatData);
+
+  const sr = audio.sampleRate;
+  const data = floatData;
+  const size = data.length;
+
+  let mean = 0;
+  for (let i = 0; i < size; i++) mean += data[i];
+  mean /= size;
+
+  let energy = 0;
+  for (let i = 0; i < size; i++) {
+    const sample = data[i] - mean;
+    energy += sample * sample;
+  }
+
+  const rms = Math.sqrt(energy / size);
+  if (rms < 0.008) return null;
+
+  // Autocorrelation estimates the repeating waveform period.
+  const minLag = Math.max(1, Math.floor(sr / 1000));
+  const maxLag = Math.min(
+    Math.floor(sr / 55), Math.floor(size / 2)
+  );
+
+  let bestLag = -1;
+  let bestCorrelation = 0;
+
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let cross = 0;
+    let energyA = 0;
+    let energyB = 0;
+
+    for (let i = 0; i < size - lag; i += 3) {
+      const a = data[i] - mean;
+      const b = data[i + lag] - mean;
+      cross += a * b;
+      energyA += a * a;
+      energyB += b * b;
+    }
+
+    const denominator = Math.sqrt(energyA * energyB);
+    const correlation = denominator > 0
+      ? cross / denominator : 0;
+
+    if (correlation > bestCorrelation) {
+      bestCorrelation = correlation;
+      bestLag = lag;
+    }
+  }
+
+  if (bestLag < 0 || bestCorrelation < 0.55) return null;
+
+  return sr / bestLag;
+}
+
+function updateMeasurements() {
+  if (!analyser || !floatData) return;
+
+  analyser.getFloatTimeDomainData(floatData);
+  let sum = 0;
+
+  for (let i = 0; i < floatData.length; i++) {
+    sum += floatData[i] * floatData[i];
+  }
+
+  const rms = Math.sqrt(sum / floatData.length);
   const db = rms > 0 ? 20 * Math.log10(rms) : -100;
 
   $("level").textContent = db.toFixed(1) + " dBFS";
@@ -245,25 +420,21 @@ function update() {
     Math.max(0, Math.min(100, (db + 60) / 60 * 100)) + "%";
 
   const peak = findPeak();
+  $("peak").textContent = formatHz(peak);
 
-  if (peak && peak > 0) {
-    $("freq").textContent =
-      peak >= 1000
-        ? (peak / 1000).toFixed(2) + " kHz"
-        : peak.toFixed(1) + " Hz";
-
-    $("peak").textContent =
-      peak >= 1000
-        ? (peak / 1000).toFixed(2) + " kHz"
-        : peak.toFixed(1) + " Hz";
-
-    $("pitch").textContent = getNote(peak);
-  } else {
-    $("freq").textContent = "—";
-    $("peak").textContent = "—";
-    $("pitch").textContent = "—";
+  // Pitch analysis is less frequent to reduce phone CPU usage.
+  frameCount++;
+  if (frameCount % 4 === 0) {
+    const fundamental = estimatePitch();
+    $("freq").textContent = formatHz(fundamental);
+    $("pitch").textContent = getNote(fundamental);
   }
+}
 
+function update() {
+  if (!running) return;
+
+  updateMeasurements();
   drawSpectrum();
   drawWave();
 
@@ -271,32 +442,36 @@ function update() {
 }
 
 async function startAnalyzer() {
-  if (running) return;
+  if (running || starting) return;
 
   if (!navigator.mediaDevices ||
       !navigator.mediaDevices.getUserMedia) {
     $("message").textContent =
-      "Microphone unavailable. Open the website using HTTPS in a supported browser.";
+      "Microphone unavailable. Open this site over HTTPS in a supported browser.";
     return;
   }
 
+  starting = true;
   $("start").disabled = true;
   $("message").textContent = "Requesting microphone permission...";
 
   try {
-    const noise = $("noise").value === "on";
+    const AudioContextClass =
+      window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextClass) {
+      throw new Error("Web Audio is not supported by this browser");
+    }
 
     stream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        echoCancellation: noise,
-        noiseSuppression: noise,
+        echoCancellation: $("noise").value === "on",
+        noiseSuppression: $("noise").value === "on",
         autoGainControl: false
       }
     });
 
-    audio = new (window.AudioContext ||
-                 window.webkitAudioContext)();
-
+    audio = new AudioContextClass();
     await audio.resume();
 
     analyser = audio.createAnalyser();
@@ -309,31 +484,95 @@ async function startAnalyzer() {
 
     freqData = new Float32Array(analyser.frequencyBinCount);
     waveData = new Uint8Array(analyser.fftSize);
+    floatData = new Float32Array(analyser.fftSize);
 
     running = true;
+    starting = false;
+    frameCount = 0;
+
     $("stop").disabled = false;
+    $("record").disabled = !window.MediaRecorder;
     $("dot").classList.add("on");
     $("status").textContent = "Microphone active";
     $("message").textContent =
-      "Analyzer running. Speak, clap gently, or play a sound nearby.";
+      "Analyzer running. Speak or play a sound nearby.";
+    $("recordMessage").textContent = window.MediaRecorder
+      ? "Ready to record."
+      : "Audio recording is not supported by this browser.";
 
     update();
   } catch (error) {
+    running = false;
+    starting = false;
+
+    if (source) {
+      try { source.disconnect(); } catch (_) {}
+    }
+    source = null;
+
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    stream = null;
+
+    if (audio) {
+      const oldAudio = audio;
+      audio = null;
+      try { await oldAudio.close(); } catch (_) {}
+    }
+
+    analyser = null;
+    freqData = null;
+    waveData = null;
+    floatData = null;
+
     $("start").disabled = false;
     $("stop").disabled = true;
+    $("record").disabled = true;
+    $("dot").classList.remove("on");
     $("status").textContent = "Microphone stopped";
     $("message").textContent =
       "Could not start microphone: " + error.message +
-      ". Check browser permissions and try again.";
+      ". Check site permissions and try again.";
+
+    clearMeasurements();
   }
 }
 
 async function stopAnalyzer() {
+  if (starting) {
+    $("message").textContent =
+      "Microphone startup is still in progress. Please wait.";
+    return;
+  }
+
+  if (!running && !audio && !stream) return;
+
   running = false;
-  cancelAnimationFrame(animation);
+  $("stop").disabled = true;
+  $("record").disabled = true;
+  $("message").textContent = "Stopping analyzer...";
+
+  if (animation !== null) cancelAnimationFrame(animation);
+  animation = null;
+
+  // Finish recording before shutting down its microphone stream.
+  if (recordingActive && mediaRecorder &&
+      mediaRecorder.state !== "inactive") {
+    try {
+      await new Promise(resolve => {
+        mediaRecorder.addEventListener("stop", resolve, {once:true});
+        try {
+          mediaRecorder.stop();
+        } catch (_) {
+          resolve();
+        }
+      });
+    } catch (_) {
+      // Continue cleaning up even if the recorder reports an error.
+    }
+  }
 
   if (source) {
-    source.disconnect();
+    try { source.disconnect(); } catch (_) {}
     source = null;
   }
 
@@ -343,42 +582,145 @@ async function stopAnalyzer() {
   }
 
   if (audio) {
-    await audio.close();
+    const oldAudio = audio;
     audio = null;
+    try { await oldAudio.close(); } catch (_) {}
   }
 
   analyser = null;
   freqData = null;
   waveData = null;
+  floatData = null;
 
   $("start").disabled = false;
   $("stop").disabled = true;
+  $("record").disabled = true;
+  $("stopRecord").disabled = true;
   $("dot").classList.remove("on");
   $("status").textContent = "Microphone stopped";
   $("message").textContent =
-    "Analyzer stopped. Press Start Analyzer to begin again.";
-  $("freq").textContent = "—";
-  $("peak").textContent = "—";
-  $("pitch").textContent = "—";
-  $("level").textContent = "—";
-  $("meter").style.width = "0%";
+    "Analyzer stopped. Press Start Analyzer to restart.";
 
-  drawEmpty(spectrum);
-  drawEmpty(wave);
+  clearMeasurements();
+  drawEmpty($("spectrum"));
+  drawEmpty($("wave"));
 }
 
-function drawEmpty(canvas) {
-  const ctx = canvas.getContext("2d");
-  const size = resize(canvas, ctx);
-  ctx.fillStyle = "#071321";
-  ctx.fillRect(0, 0, size.width, size.height);
+/* RECORDING */
+
+function chooseRecordingType() {
+  if (!window.MediaRecorder) return "";
+
+  const types = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4"
+  ];
+
+  for (const type of types) {
+    if (MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return "";
 }
+
+function startRecording() {
+  if (!running || !stream || recordingActive) return;
+
+  if (!window.MediaRecorder) {
+    $("recordMessage").textContent =
+      "This browser does not support audio recording.";
+    return;
+  }
+
+  try {
+    const type = chooseRecordingType();
+    mediaRecorder = type
+      ? new MediaRecorder(stream, {mimeType:type})
+      : new MediaRecorder(stream);
+
+    recordedChunks = [];
+    recordingMime = mediaRecorder.mimeType || type || "audio/webm";
+
+    if (recordingUrl) {
+      URL.revokeObjectURL(recordingUrl);
+      recordingUrl = null;
+    }
+
+    $("save").style.display = "none";
+    $("save").removeAttribute("href");
+
+    mediaRecorder.ondataavailable = event => {
+      if (event.data && event.data.size > 0) {
+        recordedChunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      recordingActive = false;
+      $("record").disabled = !running;
+      $("stopRecord").disabled = true;
+
+      if (!recordedChunks.length) {
+        $("recordMessage").textContent =
+          "No audio data was recorded. Try recording again.";
+        return;
+      }
+
+      const blob = new Blob(recordedChunks, {type:recordingMime});
+      recordingUrl = URL.createObjectURL(blob);
+
+      const extension = recordingMime.includes("mp4")
+        ? "m4a" : "webm";
+
+      $("save").href = recordingUrl;
+      $("save").download = "sound-lab-recording." + extension;
+      $("save").style.display = "block";
+      $("recordMessage").textContent =
+        "Recording ready. Tap SAVE RECORDING to save the audio.";
+    };
+
+    mediaRecorder.onerror = () => {
+      $("recordMessage").textContent =
+        "Recording error. Please try again.";
+    };
+
+    mediaRecorder.start();
+    recordingActive = true;
+    $("record").disabled = true;
+    $("stopRecord").disabled = false;
+    $("recordMessage").textContent = "Recording microphone audio...";
+  } catch (error) {
+    recordingActive = false;
+    $("recordMessage").textContent =
+      "Could not record: " + error.message;
+  }
+}
+
+function stopRecording() {
+  if (mediaRecorder && recordingActive &&
+      mediaRecorder.state !== "inactive") {
+    $("stopRecord").disabled = true;
+    $("recordMessage").textContent = "Preparing your recording...";
+
+    try {
+      mediaRecorder.stop();
+    } catch (error) {
+      $("recordMessage").textContent =
+        "Could not finish recording: " + error.message;
+    }
+  }
+}
+
+/* SETTINGS AND BUTTONS */
 
 $("start").addEventListener("click", startAnalyzer);
 $("stop").addEventListener("click", stopAnalyzer);
+$("record").addEventListener("click", startRecording);
+$("stopRecord").addEventListener("click", stopRecording);
 
 $("smooth").addEventListener("input", event => {
   $("smoothText").textContent = event.target.value + "%";
+
   if (analyser) {
     analyser.smoothingTimeConstant =
       Number(event.target.value) / 100;
@@ -387,6 +729,7 @@ $("smooth").addEventListener("input", event => {
 
 $("sensitivity").addEventListener("input", event => {
   $("sensText").textContent = event.target.value + "%";
+  if (running) drawSpectrum();
 });
 
 $("range").addEventListener("change", () => {
@@ -395,7 +738,7 @@ $("range").addEventListener("change", () => {
 
 $("noise").addEventListener("change", () => {
   $("message").textContent =
-    "Noise processing changes apply next time you start the analyzer.";
+    "Noise setting saved for the next microphone start.";
 });
 
 window.addEventListener("resize", () => {
@@ -403,13 +746,18 @@ window.addEventListener("resize", () => {
     drawSpectrum();
     drawWave();
   } else {
-    drawEmpty(spectrum);
-    drawEmpty(wave);
+    drawEmpty($("spectrum"));
+    drawEmpty($("wave"));
   }
 });
 
-drawEmpty(spectrum);
-drawEmpty(wave);
+window.addEventListener("beforeunload", () => {
+  if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+  if (stream) stream.getTracks().forEach(track => track.stop());
+});
+
+drawEmpty($("spectrum"));
+drawEmpty($("wave"));
 </script>
 </body>
 </html>
